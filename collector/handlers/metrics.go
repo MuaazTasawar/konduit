@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -64,13 +65,20 @@ func IngestMetric(c *gin.Context) {
 	}
 
 	// Run anomaly detection on error_rate metrics
+	// Run anomaly detection on error_rate metrics
 	if req.MetricName == "error_rate" {
 		go func() {
 			bgCtx, bgCancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer bgCancel()
 
 			series, err := db.GetErrorRateSeries(bgCtx, req.ServiceName, 60)
-			if err != nil || len(series) == 0 {
+			if err != nil {
+				log.Printf("❌ [anomaly] GetErrorRateSeries error: %v", err)
+				return
+			}
+			log.Printf("🔍 [anomaly] got %d series points for %s", len(series), req.ServiceName)
+			if len(series) == 0 {
+				log.Printf("⚠️ [anomaly] no series data, skipping detection")
 				return
 			}
 
@@ -80,10 +88,16 @@ func IngestMetric(c *gin.Context) {
 			}
 
 			detected, zScore := anomaly.DetectZScore(values)
+			log.Printf("📊 [anomaly] detected=%v zScore=%.4f threshold=1.5 samples=%d", detected, zScore, len(values))
+
 			if detected {
+				log.Printf("🚨 [anomaly] spike detected for %s, calling Gemini...", req.ServiceName)
 				hypothesis, err := anomaly.GenerateHypothesis(bgCtx, req.ServiceName, req.Value, zScore, series)
 				if err != nil {
+					log.Printf("❌ [anomaly] Gemini error: %v", err)
 					hypothesis = "Anomaly detected but hypothesis generation failed."
+				} else {
+					log.Printf("✅ [anomaly] Gemini hypothesis received")
 				}
 
 				anomalyStore = append(anomalyStore, AnomalyResponse{

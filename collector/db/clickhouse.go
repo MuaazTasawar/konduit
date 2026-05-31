@@ -162,13 +162,16 @@ func GetRecentMetrics(ctx context.Context, serviceName string, metricName string
 }
 
 func GetErrorRateSeries(ctx context.Context, serviceName string, windowMinutes int) ([]models.Metric, error) {
-	rows, err := DB.Query(ctx, `
+	query := fmt.Sprintf(`
 		SELECT metric_id, service_name, metric_name, value, timestamp, labels
 		FROM konduit.metrics
-		WHERE service_name = ?
+		WHERE service_name = '%s'
 		  AND metric_name = 'error_rate'
-		  AND timestamp >= now() - INTERVAL ? MINUTE
-		ORDER BY timestamp ASC`, serviceName, windowMinutes)
+		  AND timestamp >= now() - INTERVAL %d MINUTE
+		ORDER BY timestamp ASC`,
+		serviceName, windowMinutes)
+
+	rows, err := DB.Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}
