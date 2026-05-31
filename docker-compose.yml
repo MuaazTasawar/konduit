@@ -1,0 +1,25 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: konduit-clickhouse
+    ports:
+      - "8123:8123"   # HTTP interface (used by Go driver)
+      - "9000:9000"   # Native TCP interface
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./migrations:/docker-entrypoint-initdb.d
+    environment:
+      CLICKHOUSE_DB: konduit
+      CLICKHOUSE_USER: konduit_user
+      CLICKHOUSE_PASSWORD: konduit_pass
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  clickhouse_data:
+    driver: local
